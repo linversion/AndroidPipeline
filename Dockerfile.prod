@@ -1,0 +1,133 @@
+FROM ubuntu:22.04
+
+ENV ANDROID_HOME="/opt/android-sdk"
+
+# support amd64 and arm64
+RUN JDK_PLATFORM=$(if [ "$(uname -m)" = "aarch64" ]; then echo "arm64"; else echo "amd64"; fi) && \
+    echo export JDK_PLATFORM=$JDK_PLATFORM >> /etc/jdk.env && \
+    echo export JAVA_HOME="/usr/lib/jvm/java-11-openjdk-$JDK_PLATFORM/" >> /etc/jdk.env && \
+    echo . /etc/jdk.env >> /etc/bash.bashrc && \
+    echo . /etc/jdk.env >> /etc/profile
+
+# Set locale
+ENV LANG="en_US.UTF-8" \
+    LANGUAGE="en_US.UTF-8" \
+    LC_ALL="en_US.UTF-8"
+
+# Update apt-get 
+RUN apt-get clean && \
+    apt-get update -qq && \
+    apt-get install -qq -y apt-utils locales && \
+    locale-gen $LANG
+
+# Avoid packages installation to get stuck 
+ENV DEBIAN_FRONTEND="noninteractive" \
+    TERM=dumb \
+    DEBIAN_FRONTEND=noninteractive
+
+WORKDIR /tmp
+
+# Installing packages
+RUN apt-get update -qq > /dev/null && \
+    apt-get install -qq locales > /dev/null && \
+    locale-gen "$LANG" > /dev/null && \
+    apt-get install -qq --no-install-recommends \
+    autoconf \
+    build-essential \
+    curl \
+    file \
+    libc6-dev \
+    libgmp-dev \
+    libmpc-dev \
+    libmpfr-dev \
+    libxslt-dev \
+    libxml2-dev \
+    openjdk-11-jdk \
+    pkg-config \
+    ruby-full \
+    tzdata \
+    unzip \
+    wget \
+    zip \
+    zipalign \
+    python3 \
+    git \
+    zlib1g-dev > /dev/null
+
+# Clean up temporary install garbage
+RUN rm -rf /tmp/* /var/tmp/*
+
+# Defines envs variables and path 
+ENV ANDROID_SDK_HOME="$ANDROID_HOME"
+ENV PATH="$JAVA_HOME/bin:$PATH:$ANDROID_SDK_HOME/emulator:$ANDROID_SDK_HOME/tools/bin:$ANDROID_SDK_HOME/tools:$ANDROID_SDK_HOME/platform-tools:"
+
+# Get the latest version from https://developer.android.com/studio/index.html
+ENV ANDROID_SDK_TOOLS_VERSION="8512546_latest"
+ENV ANDROID_CMD_DIRECTORY="$ANDROID_HOME/cmdline-tools/latest"
+
+# Install Android Toolchain
+RUN echo "sdk tools ${ANDROID_SDK_TOOLS_VERSION}" && \
+    wget --quiet --output-document=sdk-tools.zip \
+    "https://dl.google.com/android/repository/commandlinetools-linux-${ANDROID_SDK_TOOLS_VERSION}.zip" && \
+    mkdir --parents "$ANDROID_HOME/cmdline-tools" && \
+    unzip sdk-tools.zip -d "$ANDROID_HOME/cmdline-tools" && \
+    mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" $ANDROID_CMD_DIRECTORY && \
+    rm --force sdk-tools.zip
+
+# Install SDKs
+# The `yes` is for accepting all non-standard tool licenses.
+RUN mkdir --parents "$ANDROID_HOME/.android/" && \
+    echo '### User Sources for Android SDK Manager' > \
+    "$ANDROID_HOME/.android/repositories.cfg" && \
+    . /etc/jdk.env && \
+    yes | "$ANDROID_CMD_DIRECTORY"/bin/sdkmanager --licenses > /dev/null
+
+# Install Android SDK required versions
+# https://developer.android.com/studio/command-line/sdkmanager.html
+RUN echo "platforms" && \
+    . /etc/jdk.env && \
+    yes | "$ANDROID_CMD_DIRECTORY"/bin/sdkmanager \
+    "platforms;android-33" > /dev/null
+
+RUN echo "platform tools" && \
+    . /etc/jdk.env && \
+    yes | "$ANDROID_CMD_DIRECTORY"/bin/sdkmanager \
+    "platform-tools" > /dev/null
+
+RUN echo "build tools 33" && \
+    . /etc/jdk.env && \
+    yes | "$ANDROID_CMD_DIRECTORY"/bin/sdkmanager \
+    "build-tools;33.0.0" > /dev/null
+    
+# Copy sdk license agreement files.
+RUN mkdir -p $ANDROID_HOME/licenses
+# COPY licenses/* $ANDROID_HOME/licenses/
+RUN chmod +w /opt/android-sdk/.android
+# Clean up install debris 
+RUN apt-get clean
+
+# download aabResGuard 0.1.10 & bundleTool
+RUN mkdir -p $ANDROID_HOME/aabresguard
+RUN curl -L https://github.com/martinloren/mvn-repo/raw/main/AabResGuard_0.1.10.zip -o $ANDROID_HOME/aabresguard/AabResGuard_0.1.10.zip
+RUN unzip $ANDROID_HOME/aabresguard/AabResGuard_0.1.10.zip -d $ANDROID_HOME/aabresguard
+RUN curl -L https://github.com/google/bundletool/releases/download/1.15.2/bundletool-all-1.15.2.jar -o $ANDROID_HOME/aabresguard/bundletool.jar
+# generate debug keystore in case jenkins don't have write permission
+RUN keytool -genkey -v -dname "cn=Jenkins android, ou=pipeline, o=android, c=CN" -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 9125 -keystore /opt/android-sdk/.android/debug.keystore -storepass android -keypass android
+ARG BUILD_DATE=""
+ARG SOURCE_BRANCH=""
+ARG SOURCE_COMMIT=""
+ARG DOCKER_TAG=""
+
+ENV BUILD_DATE=${BUILD_DATE} \
+    SOURCE_BRANCH=${SOURCE_BRANCH} \
+    SOURCE_COMMIT=${SOURCE_COMMIT} \
+    DOCKER_TAG=${DOCKER_TAG}
+
+WORKDIR /project
+
+LABEL org.label-schema.schema-version="1.0"
+LABEL org.label-schema.name="android-build"
+LABEL org.label-schema.version="${DOCKER_TAG}"
+LABEL org.label-schema.docker.cmd="docker run --rm -v $(pwd):/project android-build:1.0 bash -c 'cd /project; ./gradlew build'"
+LABEL org.label-schema.build-date="${BUILD_DATE}"
+LABEL org.label-schema.vcs-ref="${SOURCE_COMMIT}@${SOURCE_BRANCH}"
