@@ -64,9 +64,10 @@ docker exec -u root -it jenkins bash
 apt-get update
 apt-get install -y docker.io
 ```
+这个时候如果你在容器环境运行`docker ps`命令，显示的结果会跟在宿主运行显示的结果一致。
 
 3. 配置jenkins账号密码
-
+特别要注意安装好`Docker Pipeline`这个插件！！不然无法使用下面的镜像。
 
 ## android-build镜像
 
@@ -315,7 +316,7 @@ pipeline {
 
 至此，万事俱备，只欠东风，运行一遍pipeline，也许你会遇到一个权限报错：Got permission denied while trying to connect to the Docker daemon，可参考[解决方案](https://medium.com/igorgsousa-tech/docker-in-docker-with-jenkins-permission-problem-637f45549947)。
 
-如果你的Jenkins运行在本地，则可以安装**Docker pipeline**这个插件即可在pipeline中使用Docker容器。
+再次提醒，如果你的报错提示 Invalid agent type "docker"，则速去安装**Docker pipeline**这个插件即可在pipeline中使用Docker容器。
 
 运行效果：
 
