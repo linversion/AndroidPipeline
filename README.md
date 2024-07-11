@@ -1,4 +1,3 @@
-# 如何使用Docker + Jenkins pipeline搭建安卓打包环境
 厌倦了每次都得在不同的打包机配置Android打包环境？
 
 厌倦了不同打包环境带来的问题？
@@ -181,7 +180,10 @@ build成功之后就可以通过docker run 来运行这个镜像，不过我们�
 ```shell
 pipline {
     agent {
-        docker { image 'android-build:1.0' }
+        docker { 
+            image 'android-build:1.0'
+            args ''
+        }
     }
     ...
 }
@@ -313,6 +315,9 @@ pipeline {
     }
 }
 ```
+还有一个重要步骤：如果你不设置GRADLE_USER_HOME，那么gradle默认下载的目录是在/root/.gradle，然后每次pipeline执行完都会把android-build容器删除，因此gradle也被删除了，导致每次build都要下载一遍，结局人方法也很简单，到jenkisn-系统管理-系统配置-新增一个环境变量(GRADLE_USER_HOME)，值跟jenkins工作目录相同即可。
+
+![截屏2024-07-11 16.11.06.png](https://p0-xtjj-private.juejin.cn/tos-cn-i-73owjymdk6/7d6357f472524ae6b0eff74bccd05c5f~tplv-73owjymdk6-watermark.image?policy=eyJ2bSI6MywidWlkIjoiNDMzNjEyOTU5MDQzNzkxOCJ9&rk3s=f64ab15b&x-orig-authkey=f32326d3454f2ac7e96d3d06cdbb035152127018&x-orig-expires=1720773756&x-orig-sign=nA%2BVjo5%2FarIoYHd4pEeNRNW%2FXac%3D)
 
 至此，万事俱备，只欠东风，运行一遍pipeline，也许你会遇到一个权限报错：Got permission denied while trying to connect to the Docker daemon，可参考[解决方案](https://medium.com/igorgsousa-tech/docker-in-docker-with-jenkins-permission-problem-637f45549947)。
 
